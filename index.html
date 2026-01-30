@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protected Download Hub - Premium</title>
+<link rel="stylesheet" href="/static/style.css"></head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="logo">DOWNLOAD HUB</div>
+        <div class="header-stats">
+            <div class="stat-item">
+                <div class="stat-icon">✓</div>
+                <span>Pop-ups: <strong id="popupCount">0</strong></span>
+            </div>
+            <div class="stat-item">
+                <div class="stat-icon">✓</div>
+                <span>Redirects: <strong id="redirectCount">0</strong></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Control Bar -->
+    <div class="control-bar" style="display: none;" id="controlBar">
+        <button class="control-btn back" onclick="goBack()">← BACK</button>
+        <button class="control-btn reload" onclick="reloadFrame()">🔄 RELOAD</button>
+        <button class="control-btn direct" onclick="openDirect()">🔗 DIRECT</button>
+    </div>
+
+    <!-- Initial Overlay -->
+    <div class="overlay" id="initialOverlay">
+        <div class="overlay-content">
+            <h1 class="overlay-title">🛡️ PROTECTED</h1>
+            <p class="overlay-subtitle">Advanced protection for safe downloads from file hosting sites</p>
+
+            <div class="input-container">
+                <input 
+                    type="text" 
+                    class="input-field" 
+                    id="downloadLink" 
+                    placeholder="Paste your download link here..." 
+                    oninput="autoDetectSite()">
+            </div>
+
+            <div class="auto-detected" id="autoDetected">
+                🎯 <strong>Auto-detected:</strong> <span id="detectedSite"></span> - Optimal settings loaded!
+            </div>
+
+            <div class="glass-card">
+                <div class="section-title">⚡ QUICK PRESETS</div>
+                <div class="preset-grid">
+                    <button class="preset-btn" onclick="setPreset('hubcloud')">HubCloud</button>
+                    <button class="preset-btn" onclick="setPreset('katfile')">KatFile</button>
+                    <button class="preset-btn" onclick="setPreset('fastdl')">Fast-DL</button>
+                    <button class="preset-btn active" onclick="setPreset('auto')">Auto</button>
+                    <button class="preset-btn" onclick="setPreset('custom')">Custom</button>
+                </div>
+                <div class="preset-notice" id="presetNotice"></div>
+            </div>
+
+            <div class="glass-card">
+                <div class="section-title">🔒 PROTECTION LEVEL</div>
+                <div class="protection-option">
+                    <label>
+                        <input type="radio" name="protectionMode" value="hubcloud-compatible">
+                        <div>
+                            <strong>HubCloud Compatible</strong>
+                            <span>Maximum compatibility for HubCloud & similar sites</span>
+                        </div>
+                    </label>
+                </div>
+                <div class="protection-option">
+                    <label>
+                        <input type="radio" name="protectionMode" value="balanced" checked>
+                        <div>
+                            <strong>Balanced (Recommended)</strong>
+                            <span>Works for most file hosting sites</span>
+                        </div>
+                    </label>
+                </div>
+                <div class="protection-option">
+                    <label>
+                        <input type="radio" name="protectionMode" value="aggressive">
+                        <div>
+                            <strong>Aggressive</strong>
+                            <span>Maximum blocking - may break some downloads</span>
+                        </div>
+                    </label>
+                </div>
+                <div class="protection-option">
+                    <label>
+                        <input type="radio" name="protectionMode" value="minimal">
+                        <div>
+                            <strong>Minimal</strong>
+                            <span>Light protection for trusted sites</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="tips-section">
+                <strong>💡 Pro Tip:</strong> Auto-detection analyzes your link and selects the best protection settings automatically. Just paste and go!
+            </div>
+
+            <details>
+                <summary>📋 Advanced: Direct Link Usage</summary>
+                <div class="details-content">
+                    <p><strong>Access directly with URL parameters:</strong></p>
+                    <code>?url=YOUR_DOWNLOAD_LINK</code>
+                    <p><strong>Auto-start (skip overlay):</strong></p>
+                    <code>?url=YOUR_LINK&autostart=true</code>
+                    <p><strong>Example:</strong></p>
+                    <code>protected-download-hub.html?url=hubcloud.foo/file123&autostart=true</code>
+                </div>
+            </details>
+
+            <button class="start-btn" onclick="startProtectedView()">
+                🚀 Start Protected Download
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-container" style="display: none;" id="mainContent">
+        <div class="iframe-container">
+            <iframe id="downloadFrame"></iframe>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <span>🛡️</span>
+        <span><strong>Blocked!</strong> Prevented malicious pop-up</span>
+    </div>
+
+    <script>
+        let popupCount = 0;
+        let redirectCount = 0;
+        let strictMode = true;
+        let downloadUrl = '';
+        let protectionLevel = 'balanced';
+        let currentPreset = 'auto';
+        let detectedSiteType = null;
+
+        // Get URL from query parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const externalUrl = urlParams.get('url');
+        const autoStart = urlParams.get('autostart') || urlParams.get('auto');
+        
+        if (externalUrl) {
+            document.getElementById('downloadLink').value = decodeURIComponent(externalUrl);
+            autoDetectSite();
+            
+            if (autoStart === 'true' || autoStart === '1') {
+                setTimeout(() => {
+                    startProtectedView();
+                }, 500);
+            }
+        }
+
+        // Auto-detection
+        function autoDetectSite() {
+            const url = document.getElementById('downloadLink').value.toLowerCase();
+            const autoDetectedDiv = document.getElementById('autoDetected');
+            const detectedSiteSpan = document.getElementById('detectedSite');
+            
+            if (!url) {
+                autoDetectedDiv.style.display = 'none';
+                return;
+            }
+
+            if (url.includes('hubcloud')) {
+                detectedSiteType = 'hubcloud';
+                detectedSiteSpan.textContent = 'HubCloud';
+                autoDetectedDiv.style.display = 'block';
+                setPresetAuto('hubcloud');
+                return;
+            }
+
+            if (url.includes('fast-dl') || url.includes('fastdl')) {
+                detectedSiteType = 'fastdl';
+                detectedSiteSpan.textContent = 'Fast-DL';
+                autoDetectedDiv.style.display = 'block';
+                setPresetAuto('fastdl');
+                return;
+            }
+
+            if (url.includes('katfile')) {
+                detectedSiteType = 'katfile';
+                detectedSiteSpan.textContent = 'KatFile';
+                autoDetectedDiv.style.display = 'block';
+                setPresetAuto('katfile');
+                return;
+            }
+
+            if (url.includes('mediafire')) {
+                detectedSiteType = 'mediafire';
+                detectedSiteSpan.textContent = 'MediaFire';
+                autoDetectedDiv.style.display = 'block';
+                setPresetAuto('balanced');
+                return;
+            }
+
+            if (url.includes('mega.nz') || url.includes('mega.io')) {
+                detectedSiteType = 'mega';
+                detectedSiteSpan.textContent = 'MEGA';
+                autoDetectedDiv.style.display = 'block';
+                setPresetAuto('minimal');
+                return;
+            }
+
+            autoDetectedDiv.style.display = 'none';
+            detectedSiteType = null;
+        }
+
+        function setPresetAuto(preset) {
+            currentPreset = preset;
+            const notice = document.getElementById('presetNotice');
+            
+            switch(preset) {
+                case 'hubcloud':
+                    document.querySelector('input[value="hubcloud-compatible"]').checked = true;
+                    protectionLevel = 'hubcloud-compatible';
+                    notice.textContent = '⚙️ HubCloud mode: Maximum compatibility enabled';
+                    notice.style.display = 'block';
+                    break;
+                case 'katfile':
+                    document.querySelector('input[value="balanced"]').checked = true;
+                    protectionLevel = 'balanced';
+                    notice.textContent = '⚙️ KatFile mode: Balanced protection';
+                    notice.style.display = 'block';
+                    break;
+                case 'fastdl':
+                    document.querySelector('input[value="aggressive"]').checked = true;
+                    protectionLevel = 'aggressive';
+                    notice.textContent = '⚙️ Fast-DL mode: Maximum protection';
+                    notice.style.display = 'block';
+                    break;
+                case 'balanced':
+                    document.querySelector('input[value="balanced"]').checked = true;
+                    protectionLevel = 'balanced';
+                    notice.textContent = '⚙️ Standard mode: Balanced protection';
+                    notice.style.display = 'block';
+                    break;
+                case 'minimal':
+                    document.querySelector('input[value="minimal"]').checked = true;
+                    protectionLevel = 'minimal';
+                    notice.textContent = '⚙️ Minimal mode: Light protection';
+                    notice.style.display = 'block';
+                    break;
+            }
+        }
+
+        function setPreset(preset) {
+            currentPreset = preset;
+            const notice = document.getElementById('presetNotice');
+            
+            document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            switch(preset) {
+                case 'hubcloud':
+                    document.querySelector('input[value="hubcloud-compatible"]').checked = true;
+                    protectionLevel = 'hubcloud-compatible';
+                    notice.textContent = '⚙️ HubCloud mode: Maximum compatibility';
+                    notice.style.display = 'block';
+                    break;
+                case 'katfile':
+                    document.querySelector('input[value="balanced"]').checked = true;
+                    protectionLevel = 'balanced';
+                    notice.textContent = '⚙️ KatFile mode: Balanced protection';
+                    notice.style.display = 'block';
+                    break;
+                case 'fastdl':
+                    document.querySelector('input[value="aggressive"]').checked = true;
+                    protectionLevel = 'aggressive';
+                    notice.textContent = '⚙️ Fast-DL mode: Maximum protection';
+                    notice.style.display = 'block';
+                    break;
+                case 'auto':
+                    notice.style.display = 'none';
+                    autoDetectSite();
+                    break;
+                case 'custom':
+                    notice.textContent = '⚙️ Custom: Select your protection level';
+                    notice.style.display = 'block';
+                    break;
+            }
+        }
+
+        document.querySelectorAll('input[name="protectionMode"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                protectionLevel = e.target.value;
+            });
+        });
+
+        function startProtectedView() {
+            downloadUrl = document.getElementById('downloadLink').value.trim();
+            
+            if (!downloadUrl) {
+                alert('Please enter a download link');
+                return;
+            }
+
+            if (!downloadUrl.startsWith('http')) {
+                downloadUrl = 'https://' + downloadUrl;
+            }
+
+            if (currentPreset === 'auto' && !detectedSiteType) {
+                autoDetectSite();
+            }
+
+            document.getElementById('initialOverlay').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+            document.getElementById('controlBar').style.display = 'flex';
+            loadProtectedFrame();
+        }
+
+        function loadProtectedFrame() {
+            const iframe = document.getElementById('downloadFrame');
+            
+            let sandboxValue = '';
+            switch(protectionLevel) {
+                case 'hubcloud-compatible':
+                    sandboxValue = 'allow-same-origin allow-scripts allow-forms allow-downloads allow-popups allow-top-navigation allow-modals allow-pointer-lock';
+                    break;
+                case 'balanced':
+                    sandboxValue = 'allow-same-origin allow-scripts allow-forms allow-downloads allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation';
+                    break;
+                case 'aggressive':
+                    sandboxValue = 'allow-same-origin allow-scripts allow-forms allow-downloads';
+                    break;
+                case 'minimal':
+                    sandboxValue = 'allow-same-origin allow-scripts allow-forms allow-downloads allow-popups allow-top-navigation allow-modals';
+                    break;
+            }
+            
+            iframe.setAttribute('sandbox', sandboxValue);
+            iframe.src = downloadUrl;
+        }
+
+        let originalOpen = window.open;
+        window.open = function(url, name, specs) {
+            if (url && (url.includes('/download') || url.includes('/get-file'))) {
+                return originalOpen(url, name, specs);
+            }
+            
+            if (strictMode) {
+                popupCount++;
+                document.getElementById('popupCount').textContent = popupCount;
+                showToast();
+                return null;
+            }
+            return originalOpen(url, name, specs);
+        };
+
+        function showToast(message = 'Prevented malicious pop-up') {
+            const toast = document.getElementById('toast');
+            toast.innerHTML = `
+                <span>🛡️</span>
+                <span><strong>Blocked!</strong> ${message}</span>
+            `;
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        function reloadFrame() {
+            const iframe = document.getElementById('downloadFrame');
+            iframe.src = '';
+            setTimeout(() => {
+                loadProtectedFrame();
+            }, 100);
+            popupCount = 0;
+            redirectCount = 0;
+            document.getElementById('popupCount').textContent = '0';
+            document.getElementById('redirectCount').textContent = '0';
+        }
+
+        function goBack() {
+            const iframe = document.getElementById('downloadFrame');
+            try {
+                iframe.contentWindow.history.back();
+            } catch (e) {
+                // If we can't access iframe history (cross-origin), show message
+                showToast('Cannot go back - iframe navigation restricted');
+            }
+        }
+
+        function openDirect() {
+            if (confirm('⚠️ Open directly in new tab?\n\nLess protection, but may work better.\nRecommend using an ad-blocker!')) {
+                window.open(downloadUrl, '_blank');
+            }
+        }
+
+        // Enhanced mobile touch support
+        let touchStartY = 0;
+        document.addEventListener('touchstart', (e) => {
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+
+        document.addEventListener('touchmove', (e) => {
+            const touchY = e.touches[0].clientY;
+            const touchDiff = touchStartY - touchY;
+            
+            // Smooth scrolling for mobile
+            if (Math.abs(touchDiff) > 5) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    </script>
+</body>
+</html>
